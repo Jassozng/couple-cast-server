@@ -12,7 +12,7 @@ const io = new Server(httpServer, {
   }
 })
 
-const rooms = {}
+const rooms = {} // { [roomId]: { isPlaying, currentTime, updatedAt } }
 
 io.on("connection", socket => {
   socket.on("join", ({ roomId, userName }) => {
@@ -40,7 +40,9 @@ io.on("connection", socket => {
 
     if (type === "play") room.isPlaying = true
     if (type === "pause") room.isPlaying = false
-    if (type === "seek") room.isPlaying = room.isPlaying
+    if (type === "seek") {
+      // time already updated above
+    }
 
     room.updatedAt = Date.now()
 
