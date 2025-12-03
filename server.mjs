@@ -1,6 +1,7 @@
 import express from "express"
 import { createServer } from "http"
 import { Server } from "socket.io"
+import multer from "multer"
 
 const app = express()
 const httpServer = createServer(app)
@@ -12,7 +13,9 @@ const io = new Server(httpServer, {
   }
 })
 
-const rooms = {} // { [roomId]: { isPlaying, currentTime, updatedAt } }
+const upload = multer()
+const rooms = {}
+const roomVideos = {}
 
 io.on("connection", socket => {
   socket.on("join", ({ roomId, userName }) => {
@@ -27,6 +30,11 @@ io.on("connection", socket => {
     }
 
     socket.emit("state", rooms[roomId])
+
+    if (roomVideos[roomId]) {
+      socket.emit("video-ready", { roomId })
+    }
+
     socket.to(roomId).emit("user-joined", { userName })
   })
 
@@ -40,9 +48,7 @@ io.on("connection", socket => {
 
     if (type === "play") room.isPlaying = true
     if (type === "pause") room.isPlaying = false
-    if (type === "seek") {
-      // time already updated above
-    }
+    if (type === "seek") room.isPlaying = room.isPlaying
 
     room.updatedAt = Date.now()
 
@@ -54,6 +60,35 @@ io.on("connection", socket => {
       }
     })
   })
+})
+
+app.post("/upload/:roomId", upload.single("video"), (req, res) => {
+  const roomId = req.params.roomId
+  if (!req.file) {
+    res.status(400).json({ error: "No file" })
+    return
+  }
+
+  roomVideos[roomId] = {
+    buffer: req.file.buffer,
+    mimeType: req.file.mimetype || "video/mp4"
+  }
+
+  io.to(roomId).emit("video-ready", { roomId })
+  res.json({ ok: true })
+})
+
+app.get("/video/:roomId", (req, res) => {
+  const roomId = req.params.roomId
+  const video = roomVideos[roomId]
+  if (!video) {
+    res.status(404).send("No video for this room")
+    return
+  }
+
+  res.setHeader("Content-Type", video.mimeType)
+  res.setHeader("Accept-Ranges", "bytes")
+  res.send(video.buffer)
 })
 
 const PORT = process.env.PORT || 3001
